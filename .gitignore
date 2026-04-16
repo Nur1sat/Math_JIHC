@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+coverage
+*.pyc
+__pycache__
+.venv
+backend/data.sqlite3
+backend/uploads/*
+!.gitkeep
+.DS_Store
