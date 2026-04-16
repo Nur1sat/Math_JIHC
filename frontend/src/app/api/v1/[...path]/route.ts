@@ -1,15 +1,13 @@
 import { NextRequest } from "next/server";
 
-const API_BASE_URL = process.env.NEXT_SERVER_API_URL ?? "http://127.0.0.1:8000";
+import { getServerApiBaseUrl } from "@/lib/server-env";
 
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await context.params;
-  const upstreamUrl = new URL(
-    `${API_BASE_URL}/api/v1/${path.join("/")}${request.nextUrl.search}`
-  );
+  const upstreamUrl = new URL(`/api/v1/${path.join("/")}${request.nextUrl.search}`, getServerApiBaseUrl());
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("connection");
