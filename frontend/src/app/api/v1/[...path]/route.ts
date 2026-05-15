@@ -12,6 +12,7 @@ async function proxy(
   headers.delete("host");
   headers.delete("connection");
   headers.delete("content-length");
+  headers.set("accept-encoding", "identity");
 
   const init: RequestInit = {
     method: request.method,

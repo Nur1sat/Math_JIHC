@@ -41,7 +41,7 @@ export function LoginForm({
       router.replace(redirectTo);
     } catch (submissionError) {
       setError(
-        submissionError instanceof Error ? submissionError.message : "Unable to sign in"
+        submissionError instanceof Error ? submissionError.message : "Кіру мүмкін болмады"
       );
     } finally {
       setSubmitting(false);
@@ -52,7 +52,7 @@ export function LoginForm({
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label className="ml-1 block text-sm font-semibold text-on-surface-variant" htmlFor={`${role}-email`}>
-          Email Address
+          Электронды пошта
         </label>
         <div className="group relative">
           <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-outline group-focus-within:text-primary">
@@ -73,7 +73,7 @@ export function LoginForm({
       </div>
       <div className="space-y-2">
         <label className="px-1 text-sm font-semibold text-on-surface-variant" htmlFor={`${role}-password`}>
-          Password
+          Құпиясөз
         </label>
         <div className="group relative">
           <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-outline group-focus-within:text-primary">
@@ -114,7 +114,7 @@ export function LoginForm({
         disabled={submitting}
         type="submit"
       >
-        {submitting ? "Signing in..." : submitLabel}
+        {submitting ? "Кіру орындалуда..." : submitLabel}
         <MaterialIcon icon="arrow_forward" />
       </button>
       {title ? <p className="text-center text-sm text-secondary">{title}</p> : null}

@@ -71,12 +71,15 @@ def initialize_database(db: Database) -> None:
             difficulty TEXT NOT NULL,
             status TEXT NOT NULL,
             image_url TEXT,
+            document_url TEXT,
+            document_name TEXT,
             estimated_minutes INTEGER NOT NULL DEFAULT 15,
             badge TEXT,
             badge_tone TEXT,
             kind TEXT NOT NULL DEFAULT 'practice',
             question_type TEXT NOT NULL DEFAULT 'numeric',
             choices_json TEXT,
+            content_html TEXT,
             created_by INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
@@ -114,6 +117,13 @@ def initialize_database(db: Database) -> None:
         CREATE INDEX IF NOT EXISTS idx_submissions_task_user ON submissions(task_id, user_id);
         """
     )
+    columns = db.fetchall("PRAGMA table_info(tasks);")
+    if not any(column["name"] == "content_html" for column in columns):
+        db.execute("ALTER TABLE tasks ADD COLUMN content_html TEXT;")
+    if not any(column["name"] == "document_url" for column in columns):
+        db.execute("ALTER TABLE tasks ADD COLUMN document_url TEXT;")
+    if not any(column["name"] == "document_name" for column in columns):
+        db.execute("ALTER TABLE tasks ADD COLUMN document_name TEXT;")
     seed_data(db)
 
 
@@ -127,9 +137,9 @@ def seed_data(db: Database) -> None:
             "student@oasis.edu",
             hash_password("student123"),
             "student",
-            "Alex Johnson",
-            "Grade 1 Student",
-            "AJ",
+            "Айдана Оқушы",
+            "7-сынып оқушысы",
+            "АО",
             "https://lh3.googleusercontent.com/aida-public/AB6AXuBZm0J70UMexkn1mPztZFL5tMZwysV2ebpIFbUJdPC0rJvJC2XlmjQVnPUZ00IqwkoXsPQBFMACLYf8Z7CLgXwZhpGVqUsNjBiIUvud7h-7J0JK9oxVx58YXS6Ed9-4L8x9lOtV3aw2IbDbhbvs3ePFsi6zlJw-tlhA-Tp0pguDkyLF0pD2BLHTEATbHRmWgOtODqURsIHfsF4l4vZZAiQYdGK3SC4trbQh5EZw3_Yx_E_WYkfdY5nG3KBajb52LB162B3U8nwjrM65",
             created_at,
         ),
@@ -137,9 +147,9 @@ def seed_data(db: Database) -> None:
             "admin@mathacademy.edu",
             hash_password("admin123"),
             "admin",
-            "Dr. Sarah Chen",
-            "Administrator",
-            "SC",
+            "Математика мұғалімі",
+            "Әкімші",
+            "ММ",
             "https://lh3.googleusercontent.com/aida-public/AB6AXuCh_dbyTMpXmJS8SdHrj8vz0jeXzqGLv9JzwWeI2reYn55y-_9XZEr8NgkbvR54Slk4k0UQshs8kIKDNmDNt2bFuRQg-QcGP595AcErsnVNN4jD7QqL5Ypoi3El-CWlw3apz3Q5f0X-IDIxwKobLWeSDADA8Zh_zN1EJ6PUHslsqOjTrrKIU0LiVImiRVtXxckcfDxGkNRZehEK2qrMt-bR7JFsjTRqi-SW_v0I6Y0hBTYS8GGb6H-Xi09NNTlQQZ78eejzw4GP33W4",
             created_at,
         ),
@@ -156,51 +166,51 @@ def seed_data(db: Database) -> None:
     admin = db.fetchone("SELECT id FROM users WHERE role = 'admin' LIMIT 1;")
     seed_tasks = [
         {
-            "title": "Counting Apples (4-6)",
-            "description": "Practice counting groups of objects up to 6 using illustrated prompts.",
-            "prompt": "How many apples are there in the basket?",
+            "title": "Жемістерді санау",
+            "description": "Көрнекі есеп арқылы заттардың санын анықтау.",
+            "prompt": "Себетте неше алма бар?",
             "answer": "5",
-            "grade_level": "Grade 1",
-            "category": "Counting",
-            "difficulty": "Beginner",
+            "grade_level": "7-сынып",
+            "category": "Санау",
+            "difficulty": "Бастапқы",
             "status": "active",
             "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuB9NiKolxaHjD0WLyh9eXWCljw7bHRAhrcESxqNsL5D_nm3IDyFzLB_vubHzONDL4jlV9DXcs2v0GCG9HZDIdviTlOfSphOACreQdj5Zv5oJMkwsjwq_CZ05RlwAspcXLOGk7McP38hSK9o3iY_syJ6IpjJa1DiKXKSMsb2lA9vO62GRfQ3ISKJHvVvrFMIxNI74YDilR7uw0nYbFWgeXgO0zVr7yN8ONgm7fpI9ndQXhVCxWELuRCppxH77A_HVDL69GJdP87SQ9iM",
             "estimated_minutes": 8,
-            "badge": "8 Tasks",
+            "badge": "8 тапсырма",
             "badge_tone": "primary",
             "kind": "practice",
             "question_type": "choice",
             "choices_json": json.dumps(["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
         },
         {
-            "title": "Big Numbers (7-9)",
-            "description": "Master the biggest single-digit numbers with visual recognition and sequence drills.",
-            "prompt": "Which number comes after 8?",
+            "title": "Сандар қатары",
+            "description": "Сан қатарындағы келесі мүшені табу.",
+            "prompt": "8 санынан кейін қандай сан келеді?",
             "answer": "9",
-            "grade_level": "Grade 1",
-            "category": "Number Sense",
-            "difficulty": "Intermediate",
+            "grade_level": "7-сынып",
+            "category": "Сандар",
+            "difficulty": "Орташа",
             "status": "active",
             "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDdfBSsxdokt7Vcr5-M7bg8HuAfBpHqL8nIv6igfh3UvKY2d5IMBOeTu7emWKciIITL7AQZS5fQuHsRRQ8l5mTjK-7WSSEqWaNGI7yt3LpmQ1aBscvhXl8aOvLDaN_LPYPrMr70yuKjUaFGuBnEHPycWISk1LE9pU_u9Ed1mHv9Vt0TK2pnhQ8GOH2avxHsw94-Fc1deIBOkAcJmfF8pL401TJuMqWvvKAnQOK8tLCt7FOVqVkavSBZzAwNL6tHn-2Sh_cBKYkOUHwE",
             "estimated_minutes": 10,
-            "badge": "5 Tasks left",
+            "badge": "5 тапсырма",
             "badge_tone": "tertiary",
             "kind": "practice",
             "question_type": "choice",
             "choices_json": json.dumps(["6", "7", "8", "9"]),
         },
         {
-            "title": "Logical Patterns",
-            "description": "Find the next number in a geometric progression.",
-            "prompt": "Look at the pattern 2, 4, 8, 16. What number comes next?",
+            "title": "Логикалық заңдылық",
+            "description": "Геометриялық прогрессиядағы келесі санды табу.",
+            "prompt": "2, 4, 8, 16 заңдылығында келесі сан қандай?",
             "answer": "32",
-            "grade_level": "Grade 3",
-            "category": "Logic",
-            "difficulty": "Intermediate",
+            "grade_level": "7-сынып",
+            "category": "Логика",
+            "difficulty": "Орташа",
             "status": "active",
             "image_url": None,
             "estimated_minutes": 15,
-            "badge": "Logic Quest",
+            "badge": "Логика",
             "badge_tone": "secondary",
             "kind": "practice",
             "question_type": "numeric",
@@ -212,9 +222,9 @@ def seed_data(db: Database) -> None:
             """
             INSERT INTO tasks (
                 title, description, prompt, answer, grade_level, category, difficulty,
-                status, image_url, estimated_minutes, badge, badge_tone, kind,
-                question_type, choices_json, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                status, image_url, document_url, document_name, estimated_minutes, badge, badge_tone, kind,
+                question_type, choices_json, content_html, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 task["title"],
@@ -226,19 +236,22 @@ def seed_data(db: Database) -> None:
                 task["difficulty"],
                 task["status"],
                 task["image_url"],
+                None,
+                None,
                 task["estimated_minutes"],
                 task["badge"],
                 task["badge_tone"],
                 task["kind"],
                 task["question_type"],
                 task["choices_json"],
+                None,
                 admin["id"] if admin else None,
                 created_at,
                 created_at,
             ),
         )
     student = db.fetchone("SELECT id FROM users WHERE role = 'student' LIMIT 1;")
-    task = db.fetchone("SELECT id FROM tasks WHERE title = 'Logical Patterns' LIMIT 1;")
+    task = db.fetchone("SELECT id FROM tasks WHERE title = 'Логикалық заңдылық' LIMIT 1;")
     if student and task:
         db.execute(
             """

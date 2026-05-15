@@ -6,8 +6,8 @@ import { clearSession, useSession } from "@/lib/session";
 import { BrandIdentity, MaterialIcon, ShellFooter, cn } from "@/components/ui";
 
 const items = [
-  { href: "/student/dashboard", label: "Dashboard", icon: "dashboard", key: "dashboard" },
-  { href: "/student/dashboard#tasks", label: "Tasks", icon: "quiz", key: "tasks" }
+  { href: "/student/dashboard", label: "Басты бет", icon: "dashboard", key: "dashboard" },
+  { href: "/student/dashboard#tasks", label: "Тапсырмалар", icon: "quiz", key: "tasks" }
 ];
 
 export function StudentShell({
@@ -56,10 +56,10 @@ export function StudentShell({
               <div className="flex items-center gap-3">
                 <div className="hidden text-right sm:block">
                   <span className="block text-sm font-medium text-slate-800">
-                    {session?.user.fullName ?? "Student"}
+                    {session?.user.fullName ?? "Оқушы"}
                   </span>
                   <span className="block text-xs text-secondary">
-                    {session?.user.gradeLabel ?? "Student"}
+                    {session?.user.gradeLabel ?? "Оқушы"}
                   </span>
                 </div>
                 <img
@@ -78,7 +78,7 @@ export function StudentShell({
                   }}
                   type="button"
                 >
-                  Logout
+                  Шығу
                 </button>
               </div>
             </div>

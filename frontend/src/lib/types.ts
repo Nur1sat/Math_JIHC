@@ -26,11 +26,14 @@ export interface TaskItem {
   difficulty: string;
   status: string;
   imageUrl: string | null;
+  documentUrl: string | null;
+  documentName: string | null;
   estimatedMinutes: number;
   badge: string | null;
   badgeTone: string;
   questionType: "numeric" | "choice";
   choices: string[];
+  contentHtml: string | null;
   updatedAt: string;
   completed?: boolean;
   lastScore?: number | null;

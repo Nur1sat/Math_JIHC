@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Math_JIHC",
-  description: "Math_JIHC learning portal"
+  title: "math_Mindset",
+  description: "math_Mindset оқу платформасы"
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="kk">
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap"

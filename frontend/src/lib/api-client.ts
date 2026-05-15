@@ -165,6 +165,12 @@ export const apiClient = {
       ]
     });
   },
+  getStudentHint(taskId: number | string, level: number, currentAnswer: string) {
+    return request<{ hint: string; level: number }>(`/api/v1/student/tests/${taskId}/hint`, {
+      method: "POST",
+      json: { level, current_answer: currentAnswer }
+    });
+  },
   getAdminDashboard() {
     return request<AdminDashboardPayload>("/api/v1/admin/dashboard", {
       cacheTtlMs: 20_000
@@ -191,6 +197,36 @@ export const apiClient = {
   importTasksJson(formData: FormData) {
     return request<{ count: number; items: TaskListPayload["items"] }>(
       "/api/v1/admin/tasks/import-json",
+      {
+        method: "POST",
+        body: formData,
+        invalidatePrefixes: [
+          CACHE_SCOPE.adminTasks,
+          CACHE_SCOPE.studentDashboard,
+          CACHE_SCOPE.adminDashboard,
+          CACHE_SCOPE.studentTests
+        ]
+      }
+    );
+  },
+  importTasksHtml(formData: FormData) {
+    return request<{ count: number; items: TaskListPayload["items"] }>(
+      "/api/v1/admin/tasks/import-html",
+      {
+        method: "POST",
+        body: formData,
+        invalidatePrefixes: [
+          CACHE_SCOPE.adminTasks,
+          CACHE_SCOPE.studentDashboard,
+          CACHE_SCOPE.adminDashboard,
+          CACHE_SCOPE.studentTests
+        ]
+      }
+    );
+  },
+  importTasksDocx(formData: FormData) {
+    return request<{ count: number; items: TaskListPayload["items"] }>(
+      "/api/v1/admin/tasks/import-docx",
       {
         method: "POST",
         body: formData,

@@ -20,19 +20,19 @@ export default function AdminLoginPage() {
       <div className="relative z-10 w-full max-w-md">
         <div className="mb-10 flex flex-col items-center">
           <BrandIdentity className="mb-2" />
-          <p className="mt-1 text-sm font-medium uppercase tracking-widest text-outline">Admin</p>
+          <p className="mt-1 text-sm font-medium uppercase tracking-widest text-outline">Әкімші</p>
         </div>
         <div className="rounded-[2rem] border border-outline-variant/10 bg-surface-container-lowest p-8 shadow-soft">
           <div className="mb-8 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-on-surface">Admin</h2>
+            <h2 className="text-2xl font-bold text-on-surface">Әкімші</h2>
             <Link className="text-sm font-bold text-primary" href="/">
-              Student
+              Оқушы
             </Link>
           </div>
           <LoginForm
             redirectTo="/admin/dashboard"
             role="admin"
-            submitLabel="Enter"
+            submitLabel="Кіру"
             title=""
           />
         </div>

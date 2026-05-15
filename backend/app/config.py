@@ -30,7 +30,7 @@ def resolve_path(value: str | None, default: Path, base_dir: Path) -> Path:
 
 
 class Settings(BaseModel):
-    app_name: str = "Math_JIHC API"
+    app_name: str = "math_Mindset API"
     api_prefix: str = "/api/v1"
     environment: str = "development"
     base_dir: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[1])
@@ -38,8 +38,8 @@ class Settings(BaseModel):
     uploads_dir: Path
     token_ttl_seconds: int = 60 * 60 * 24
     cache_ttl_seconds: int = 20
-    max_upload_size_bytes: int = 5 * 1024 * 1024
-    secret_key: str = "math-jihc-local-secret"
+    max_upload_size_bytes: int = 10 * 1024 * 1024
+    secret_key: str = "math-mindset-local-secret"
     cors_allow_origins: list[str] = Field(default_factory=lambda: DEFAULT_LOCAL_ORIGINS.copy())
 
     @classmethod
@@ -48,7 +48,7 @@ class Settings(BaseModel):
         database_path = resolve_path(os.getenv("DATABASE_PATH"), base_dir / "data.sqlite3", base_dir)
         uploads_dir = resolve_path(os.getenv("UPLOADS_DIR"), base_dir / "uploads", base_dir)
         settings = cls(
-            app_name=os.getenv("APP_NAME", "Math_JIHC API"),
+            app_name=os.getenv("APP_NAME", "math_Mindset API"),
             api_prefix=os.getenv("API_PREFIX", "/api/v1"),
             environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
             base_dir=base_dir,
@@ -56,8 +56,8 @@ class Settings(BaseModel):
             uploads_dir=uploads_dir,
             token_ttl_seconds=int(os.getenv("TOKEN_TTL_SECONDS", str(60 * 60 * 24))),
             cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "20")),
-            max_upload_size_bytes=int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(5 * 1024 * 1024))),
-            secret_key=os.getenv("SECRET_KEY", "math-jihc-local-secret"),
+            max_upload_size_bytes=int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(10 * 1024 * 1024))),
+            secret_key=os.getenv("SECRET_KEY", "math-mindset-local-secret"),
             cors_allow_origins=parse_csv(os.getenv("CORS_ALLOW_ORIGINS"), DEFAULT_LOCAL_ORIGINS),
         )
         return settings
@@ -66,7 +66,7 @@ class Settings(BaseModel):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     settings = Settings.from_env()
-    if settings.environment == "production" and settings.secret_key == "math-jihc-local-secret":
+    if settings.environment == "production" and settings.secret_key == "math-mindset-local-secret":
         msg = "SECRET_KEY must be set in production."
         raise ValueError(msg)
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)

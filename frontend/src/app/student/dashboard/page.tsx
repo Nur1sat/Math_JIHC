@@ -23,7 +23,7 @@ export default function StudentDashboardPage() {
       .then(setData)
       .catch((requestError) => {
         setError(
-          requestError instanceof Error ? requestError.message : "Unable to load dashboard"
+          requestError instanceof Error ? requestError.message : "Панель жүктелмеді"
         );
       });
   }, [ready]);
@@ -31,7 +31,7 @@ export default function StudentDashboardPage() {
   return (
     <StudentShell active="dashboard">
       <section className="mx-auto w-full max-w-7xl px-8 py-8">
-        {!ready || (!data && !error) ? <LoadingPanel label="Loading..." /> : null}
+        {!ready || (!data && !error) ? <LoadingPanel label="Жүктелуде..." /> : null}
         {error ? <ErrorPanel message={error} /> : null}
         {data ? (
           <>
@@ -41,31 +41,31 @@ export default function StudentDashboardPage() {
             </div>
             <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
               <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-soft">
-                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Active</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Белсенді</p>
                 <p className="mt-3 text-4xl font-black text-primary">{data.summary.activeTasks}</p>
               </div>
               <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-soft">
-                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Completed</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Орындалды</p>
                 <p className="mt-3 text-4xl font-black text-primary">
                   {data.summary.completedTasks}
                 </p>
               </div>
               <div className="rounded-2xl bg-surface-container-lowest p-6 shadow-soft">
-                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Pending</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-secondary">Қалғаны</p>
                 <p className="mt-3 text-4xl font-black text-primary">{data.summary.pendingTasks}</p>
               </div>
               <div className="rounded-2xl bg-primary p-6 text-on-primary shadow-lg shadow-primary/20">
-                <p className="text-xs font-bold uppercase tracking-wider text-white/70">Avg. Score</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-white/70">Орташа балл</p>
                 <p className="mt-3 text-4xl font-black">{data.summary.averageScore}%</p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
               <div className="rounded-2xl bg-surface-container-lowest p-8 shadow-soft lg:col-span-2">
                 <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-on-surface">Next Task</h3>
+                  <h3 className="text-xl font-black text-on-surface">Келесі тапсырма</h3>
                   {data.nextTask ? (
                     <Link className="text-sm font-bold text-primary" href={`/student/tests/${data.nextTask.id}`}>
-                      Open
+                      Ашу
                     </Link>
                   ) : null}
                 </div>
@@ -87,18 +87,18 @@ export default function StudentDashboardPage() {
                       className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 font-bold text-on-primary transition-colors hover:bg-primary-container"
                       href={`/student/tests/${data.nextTask.id}`}
                     >
-                      Start
+                      Бастау
                       <MaterialIcon icon="arrow_forward" />
                     </Link>
                   </div>
                 ) : (
                   <div className="rounded-2xl bg-surface-container-low p-6 text-secondary">
-                    No pending tasks.
+                    Қалған тапсырма жоқ.
                   </div>
                 )}
               </div>
               <div className="rounded-2xl bg-surface-container-lowest p-8 shadow-soft">
-                <h3 className="mb-6 text-xl font-black text-on-surface">Recent Results</h3>
+                <h3 className="mb-6 text-xl font-black text-on-surface">Соңғы нәтижелер</h3>
                 <div className="space-y-4">
                   {data.recentResults.length ? (
                     data.recentResults.map((result) => (
@@ -116,14 +116,14 @@ export default function StudentDashboardPage() {
                     ))
                   ) : (
                     <div className="rounded-xl bg-surface-container-low p-4 text-secondary">
-                      No submissions yet.
+                      Әлі жауап жіберілмеді.
                     </div>
                   )}
                 </div>
               </div>
             </div>
             <div className="mt-10" id="tasks">
-              <h3 className="mb-6 text-2xl font-black text-on-surface">Tasks</h3>
+              <h3 className="mb-6 text-2xl font-black text-on-surface">Тапсырмалар</h3>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {data.tests.map((task) => (
                   <div
@@ -137,7 +137,7 @@ export default function StudentDashboardPage() {
                     ) : (
                       <div className="mb-6 flex aspect-video items-center justify-center rounded-2xl bg-surface-container">
                         <div className="rounded-full bg-primary/10 p-4 text-primary">
-                          <MaterialIcon icon="functions" />
+                          <MaterialIcon icon={task.documentUrl ? "description" : "functions"} />
                         </div>
                       </div>
                     )}
@@ -145,25 +145,25 @@ export default function StudentDashboardPage() {
                     <p className="mb-4 flex-1 text-sm text-on-surface-variant">{task.description}</p>
                     <div className="mb-4 flex items-center justify-between text-sm text-secondary">
                       <span>{task.gradeLevel}</span>
-                      <span>{task.estimatedMinutes} min</span>
+                      <span>{task.estimatedMinutes} мин</span>
                     </div>
                     <div className="mb-4 flex items-center justify-between text-sm">
                       <span className={task.completed ? "font-bold text-primary" : "font-bold text-secondary"}>
                         {task.completed
-                          ? `Done${task.lastScore !== null && task.lastScore !== undefined ? ` · ${task.lastScore}%` : ""}`
-                          : "Open"}
+                          ? `Орындалды${task.lastScore !== null && task.lastScore !== undefined ? ` · ${task.lastScore}%` : ""}`
+                          : "Ашық"}
                       </span>
                       <span className="text-secondary">
                         {task.attemptCount
-                          ? `${task.attemptCount} attempt${task.attemptCount > 1 ? "s" : ""}`
-                          : "No attempts"}
+                          ? `${task.attemptCount} әрекет`
+                          : "Әрекет жоқ"}
                       </span>
                     </div>
                     <Link
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 font-bold text-on-primary transition-all hover:bg-primary-container"
                       href={`/student/tests/${task.id}`}
                     >
-                      {task.completed ? "Retry" : "Start"}
+                      {task.completed ? "Қайта көру" : "Бастау"}
                       <MaterialIcon icon="arrow_forward" />
                     </Link>
                   </div>

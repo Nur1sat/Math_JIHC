@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import html
+import io
+from html.parser import HTMLParser
 import json
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from zipfile import BadZipFile, ZipFile
+import xml.etree.ElementTree as ET
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +44,341 @@ class LoginPayload(BaseModel):
 
 class SubmissionPayload(BaseModel):
     answer: str
+
+
+class HintPayload(BaseModel):
+    level: int = 1
+    current_answer: str | None = None
+
+
+VOID_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
+
+
+class HtmlNode:
+    def __init__(
+        self,
+        tag: str | None = None,
+        attrs: list[tuple[str, str | None]] | None = None,
+        text: str = "",
+    ) -> None:
+        self.tag = tag
+        self.attrs = attrs or []
+        self.text = text
+        self.children: list[HtmlNode] = []
+
+    def class_names(self) -> set[str]:
+        class_attr = next((value for key, value in self.attrs if key == "class" and value), "")
+        return set(class_attr.split())
+
+
+class CardHtmlParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.root = HtmlNode("document")
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        node = HtmlNode(tag, attrs)
+        self.stack[-1].children.append(node)
+        if tag.lower() not in VOID_TAGS:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.stack[-1].children.append(HtmlNode(tag, attrs))
+
+    def handle_endtag(self, tag: str) -> None:
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index].tag == tag:
+                del self.stack[index:]
+                return
+
+    def handle_data(self, data: str) -> None:
+        self.stack[-1].children.append(HtmlNode(text=data))
+
+    def handle_entityref(self, name: str) -> None:
+        self.handle_data(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.handle_data(f"&#{name};")
+
+
+def serialize_node(node: HtmlNode) -> str:
+    if node.tag is None:
+        return node.text
+    if node.tag == "document":
+        return "".join(serialize_node(child) for child in node.children)
+    attrs = "".join(
+        f" {key}" if value is None else f' {key}="{html.escape(value, quote=True)}"'
+        for key, value in node.attrs
+    )
+    if node.tag.lower() in VOID_TAGS:
+        return f"<{node.tag}{attrs}>"
+    return f"<{node.tag}{attrs}>{''.join(serialize_node(child) for child in node.children)}</{node.tag}>"
+
+
+def text_content(node: HtmlNode) -> str:
+    if node.tag in {"script", "style"}:
+        return ""
+    if node.tag is None:
+        return html.unescape(node.text)
+    return " ".join(part for child in node.children if (part := text_content(child).strip()))
+
+
+def normalize_space(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def has_class(node: HtmlNode, class_name: str) -> bool:
+    return class_name in node.class_names()
+
+
+def find_nodes(node: HtmlNode, predicate) -> list[HtmlNode]:
+    matches = [node] if predicate(node) else []
+    for child in node.children:
+        matches.extend(find_nodes(child, predicate))
+    return matches
+
+
+def first_text(node: HtmlNode, class_names: tuple[str, ...]) -> str:
+    for class_name in class_names:
+        matches = find_nodes(node, lambda item: has_class(item, class_name))
+        if matches:
+            return normalize_space(text_content(matches[0]))
+    return ""
+
+
+def truncate_text(value: str, limit: int) -> str:
+    cleaned = normalize_space(value)
+    return cleaned if len(cleaned) <= limit else f"{cleaned[: limit - 1].rstrip()}…"
+
+
+def minutes_from_text(value: str, default: int = 30) -> int:
+    match = re.search(r"(\d+)", value)
+    return int(match.group(1)) if match else default
+
+
+def standalone_card_html(styles: str, card_html: str) -> str:
+    return f"""<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+{styles}
+body {{ margin: 0; padding: 18px; background: transparent; }}
+.problem-card, .card {{ margin-left: auto !important; margin-right: auto !important; }}
+</style>
+</head>
+<body>
+{card_html}
+<script>
+function tog(id) {{
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("visible");
+  el.classList.toggle("open");
+}}
+</script>
+</body>
+</html>"""
+
+
+def infer_grade_level(page_grade: str, card_grade: str) -> str:
+    grade = card_grade or page_grade
+    return grade.replace("сынып", "сынып").strip() or "Логикалық есептер"
+
+
+def infer_difficulty(grade_level: str) -> str:
+    if any(value in grade_level for value in ("10", "11")):
+        return "Күрделі"
+    if any(value in grade_level for value in ("8", "9")):
+        return "Орташа"
+    return "Бастапқы"
+
+
+WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def extract_docx_paragraphs(content: bytes, source_name: str) -> list[str]:
+    try:
+        with ZipFile(io.BytesIO(content)) as archive:
+            raw_xml = archive.read("word/document.xml")
+    except (BadZipFile, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=f"{source_name} дұрыс DOCX файлы емес") from exc
+    root = ET.fromstring(raw_xml)
+    paragraphs: list[str] = []
+    for paragraph in root.iter(f"{WORD_NS}p"):
+        text = "".join(node.text or "" for node in paragraph.iter(f"{WORD_NS}t"))
+        cleaned = normalize_space(text)
+        if cleaned:
+            paragraphs.append(cleaned)
+    return paragraphs
+
+
+def parse_html_tasks(raw_html: str, source_name: str) -> list[dict[str, Any]]:
+    parser = CardHtmlParser()
+    parser.feed(raw_html)
+    style_nodes = find_nodes(parser.root, lambda item: item.tag == "style")
+    styles = "\n".join("".join(child.text for child in node.children if child.tag is None) for node in style_nodes)
+    page_grade = first_text(parser.root, ("grade-tag", "main-sub"))
+    cards = find_nodes(
+        parser.root,
+        lambda item: has_class(item, "problem-card") or (
+            has_class(item, "card") and bool(first_text(item, ("card-title",)))
+        ),
+    )
+    tasks: list[dict[str, Any]] = []
+    for index, card in enumerate(cards, start=1):
+        title = first_text(card, ("task-title", "card-title")) or f"{Path(source_name).stem} #{index}"
+        grade = infer_grade_level(page_grade, first_text(card, ("grade-label", "tag-grade")))
+        category = first_text(card, ("type-label", "tag-type")) or "Логика"
+        condition = first_text(card, ("condition-text", "cond-text"))
+        question = first_text(card, ("question-text", "q-text"))
+        answer = first_text(card, ("answer-text", "ans-text")) or "Шешімі HTML карточкасының ішінде берілген"
+        time_text = first_text(card, ("meta-row",))
+        prompt = question or condition or title
+        description = truncate_text(" ".join(part for part in (condition, question) if part), 360)
+        tasks.append(
+            {
+                "title": title,
+                "description": description or title,
+                "prompt": truncate_text(prompt, 500),
+                "answer": truncate_text(answer, 1000),
+                "grade_level": grade,
+                "category": category,
+                "difficulty": infer_difficulty(grade),
+                "status": "active",
+                "estimated_minutes": minutes_from_text(time_text),
+                "badge": "HTML",
+                "badge_tone": "tertiary",
+                "kind": "html",
+                "question_type": "numeric",
+                "content_html": standalone_card_html(styles, serialize_node(card)),
+            }
+        )
+    if not tasks:
+        raise HTTPException(status_code=422, detail=f"{source_name} ішінен тапсырма карточкалары табылмады")
+    return tasks
+
+
+def value_after_label(paragraphs: list[str], label: str) -> str:
+    lowered = label.lower()
+    for index, paragraph in enumerate(paragraphs):
+        if paragraph.lower().startswith(lowered):
+            inline = paragraph.split(":", 1)[1].strip() if ":" in paragraph else ""
+            if inline:
+                return inline
+            for candidate in paragraphs[index + 1 : index + 4]:
+                if candidate and not candidate.endswith(":"):
+                    return candidate
+    return ""
+
+
+def infer_docx_grade(paragraphs: list[str], source_name: str) -> str:
+    joined = " ".join([source_name, *paragraphs[:20]])
+    match = re.search(r"(\d{1,2})\s*[-–]?\s*сынып", joined, re.IGNORECASE)
+    if match:
+        return f"{match.group(1)}-сынып"
+    direct = value_after_label(paragraphs, "Сынып")
+    if direct:
+        return f"{direct.strip()}-сынып" if direct.strip().isdigit() else direct.strip()
+    return "Логикалық есептер"
+
+
+def infer_docx_topic(paragraphs: list[str], source_name: str) -> str:
+    return value_after_label(paragraphs, "Тақырып") or Path(source_name).stem
+
+
+def split_solution(text: str) -> tuple[str, str]:
+    parts = re.split(r"(?:Шешімі|Жауабы)\s*[:：-]?", text, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) == 2:
+        return parts[0].strip(), parts[1].strip()
+    return text.strip(), "Жауапты мұғалім тексереді. Шешу жолын толық жазыңыз."
+
+
+def parse_docx_tasks(content: bytes, source_name: str, document_url: str) -> list[dict[str, Any]]:
+    paragraphs = extract_docx_paragraphs(content, source_name)
+    grade = infer_docx_grade(paragraphs, source_name)
+    topic = infer_docx_topic(paragraphs, source_name)
+    starts = [
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if re.match(r"^\d+\s*[-–]?\s*есеп\.?", paragraph, re.IGNORECASE)
+    ]
+    tasks: list[dict[str, Any]] = []
+    if starts:
+        for order, start in enumerate(starts):
+            end = starts[order + 1] if order + 1 < len(starts) else min(len(paragraphs), start + 8)
+            title = paragraphs[start]
+            body = " ".join(paragraphs[start + 1 : end])
+            prompt, answer = split_solution(body)
+            tasks.append(
+                {
+                    "title": f"{grade}: {title}",
+                    "description": truncate_text(prompt or topic, 360),
+                    "prompt": truncate_text(prompt or title, 1000),
+                    "answer": truncate_text(answer, 1400),
+                    "grade_level": grade,
+                    "category": topic,
+                    "difficulty": infer_difficulty(grade),
+                    "status": "active",
+                    "image_url": None,
+                    "document_url": document_url,
+                    "document_name": source_name,
+                    "estimated_minutes": 12,
+                    "badge": "DOCX",
+                    "badge_tone": "secondary",
+                    "kind": "docx",
+                    "question_type": "numeric",
+                    "choices_json": None,
+                    "content_html": None,
+                }
+            )
+    else:
+        prompt = next(
+            (paragraph for paragraph in paragraphs if "?" in paragraph),
+            "Құжаттағы материалды оқып, негізгі ойды қысқаша жазыңыз.",
+        )
+        tasks.append(
+            {
+                "title": f"{grade}: {topic}",
+                "description": truncate_text(" ".join(paragraphs[:12]), 360),
+                "prompt": truncate_text(prompt, 1000),
+                "answer": "Жауапты мұғалім тексереді. Негізгі ой мен шешу жолы толық жазылуы керек.",
+                "grade_level": grade,
+                "category": topic,
+                "difficulty": infer_difficulty(grade),
+                "status": "active",
+                "image_url": None,
+                "document_url": document_url,
+                "document_name": source_name,
+                "estimated_minutes": 15,
+                "badge": "DOCX",
+                "badge_tone": "secondary",
+                "kind": "docx",
+                "question_type": "numeric",
+                "choices_json": None,
+                "content_html": None,
+            }
+        )
+    if not tasks:
+        raise HTTPException(status_code=422, detail=f"{source_name} ішінен тапсырма табылмады")
+    return tasks
 
 
 def make_etag(payload: Any) -> str:
@@ -82,11 +423,14 @@ def normalize_task(row: dict[str, Any]) -> dict[str, Any]:
         "difficulty": row["difficulty"],
         "status": row["status"],
         "imageUrl": row["image_url"],
+        "documentUrl": row.get("document_url"),
+        "documentName": row.get("document_name"),
         "estimatedMinutes": row["estimated_minutes"],
         "badge": row["badge"],
         "badgeTone": row["badge_tone"] or "primary",
         "questionType": row["question_type"],
         "choices": json.loads(row["choices_json"]) if row["choices_json"] else [],
+        "contentHtml": row.get("content_html"),
         "updatedAt": row["updated_at"],
     }
 
@@ -180,12 +524,12 @@ def parse_choices(value: Any) -> list[str]:
             try:
                 data = json.loads(stripped)
             except json.JSONDecodeError as exc:
-                raise HTTPException(status_code=422, detail="choices_json is invalid") from exc
+                raise HTTPException(status_code=422, detail="Жауап нұсқалары дұрыс JSON емес") from exc
             if not isinstance(data, list):
-                raise HTTPException(status_code=422, detail="choices_json must be an array")
+                raise HTTPException(status_code=422, detail="Жауап нұсқалары тізім болуы керек")
             return [str(item).strip() for item in data if str(item).strip()]
         return [item.strip() for item in stripped.split(",") if item.strip()]
-    raise HTTPException(status_code=422, detail="choices must be a list or string")
+    raise HTTPException(status_code=422, detail="Жауап нұсқалары тізім немесе мәтін болуы керек")
 
 
 def validate_task_payload(
@@ -193,6 +537,8 @@ def validate_task_payload(
     *,
     existing: dict[str, Any] | None = None,
     image_url: str | None = None,
+    document_url: str | None = None,
+    document_name: str | None = None,
 ) -> dict[str, Any]:
     title = ensure_text(choose_value(payload, ("title",), existing["title"] if existing else None), "title")
     prompt = ensure_text(choose_value(payload, ("prompt",), existing["prompt"] if existing else None), "prompt")
@@ -205,15 +551,15 @@ def validate_task_payload(
         )
     ).strip() or prompt
     grade_level = ensure_text(
-        choose_value(payload, ("grade_level", "gradeLevel"), existing["grade_level"] if existing else "Grade 1"),
+        choose_value(payload, ("grade_level", "gradeLevel"), existing["grade_level"] if existing else "7-сынып"),
         "grade_level",
     )
     category = ensure_text(
-        choose_value(payload, ("category",), existing["category"] if existing else "Logic"),
+        choose_value(payload, ("category",), existing["category"] if existing else "Логика"),
         "category",
     )
     difficulty = ensure_text(
-        choose_value(payload, ("difficulty",), existing["difficulty"] if existing else "Beginner"),
+        choose_value(payload, ("difficulty",), existing["difficulty"] if existing else "Бастапқы"),
         "difficulty",
     )
     status_value = ensure_text(
@@ -221,7 +567,7 @@ def validate_task_payload(
         "status",
     ).lower()
     if status_value not in {"active", "draft"}:
-        raise HTTPException(status_code=422, detail="status must be active or draft")
+        raise HTTPException(status_code=422, detail="Күйі active немесе draft болуы керек")
     estimated_minutes = parse_int(
         choose_value(
             payload,
@@ -240,7 +586,7 @@ def validate_task_payload(
         "question_type",
     ).lower()
     if question_type not in {"numeric", "choice"}:
-        raise HTTPException(status_code=422, detail="question_type must be numeric or choice")
+        raise HTTPException(status_code=422, detail="Түрі numeric немесе choice болуы керек")
     parsed_choices = parse_choices(
         choose_value(
             payload,
@@ -249,11 +595,21 @@ def validate_task_payload(
         )
     )
     if question_type == "choice" and not parsed_choices:
-        raise HTTPException(status_code=422, detail="choice tasks require at least one option")
+        raise HTTPException(status_code=422, detail="Таңдау тапсырмасына кемінде бір нұсқа керек")
     final_image_url = image_url if image_url is not None else choose_value(
         payload,
         ("image_url", "imageUrl"),
         existing["image_url"] if existing else None,
+    )
+    final_document_url = document_url if document_url is not None else choose_value(
+        payload,
+        ("document_url", "documentUrl"),
+        existing["document_url"] if existing else None,
+    )
+    final_document_name = document_name if document_name is not None else choose_value(
+        payload,
+        ("document_name", "documentName"),
+        existing["document_name"] if existing else None,
     )
     return {
         "title": title,
@@ -265,12 +621,19 @@ def validate_task_payload(
         "difficulty": difficulty,
         "status": status_value,
         "image_url": final_image_url,
+        "document_url": final_document_url,
+        "document_name": final_document_name,
         "estimated_minutes": estimated_minutes,
-        "badge": choose_value(payload, ("badge",), existing["badge"] if existing else "New"),
+        "badge": choose_value(payload, ("badge",), existing["badge"] if existing else "Жаңа"),
         "badge_tone": choose_value(payload, ("badge_tone", "badgeTone"), existing["badge_tone"] if existing else "primary"),
         "kind": choose_value(payload, ("kind",), existing["kind"] if existing else "practice"),
         "question_type": question_type,
         "choices_json": json.dumps(parsed_choices) if question_type == "choice" else None,
+        "content_html": choose_value(
+            payload,
+            ("content_html", "contentHtml"),
+            existing.get("content_html") if existing else None,
+        ),
     }
 
 
@@ -280,9 +643,9 @@ def insert_task_record(task_data: dict[str, Any], user_id: int) -> dict[str, Any
         """
         INSERT INTO tasks (
             title, description, prompt, answer, grade_level, category, difficulty,
-            status, image_url, estimated_minutes, badge, badge_tone, kind,
-            question_type, choices_json, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            status, image_url, document_url, document_name, estimated_minutes, badge, badge_tone, kind,
+            question_type, choices_json, content_html, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             task_data["title"],
@@ -294,12 +657,15 @@ def insert_task_record(task_data: dict[str, Any], user_id: int) -> dict[str, Any
             task_data["difficulty"],
             task_data["status"],
             task_data["image_url"],
+            task_data["document_url"],
+            task_data["document_name"],
             task_data["estimated_minutes"],
             task_data["badge"],
             task_data["badge_tone"],
             task_data["kind"],
             task_data["question_type"],
             task_data["choices_json"],
+            task_data["content_html"],
             user_id,
             now,
             now,
@@ -307,7 +673,7 @@ def insert_task_record(task_data: dict[str, Any], user_id: int) -> dict[str, Any
     )
     task = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (cursor.lastrowid,))
     if task is None:
-        raise HTTPException(status_code=500, detail="Task was not created")
+        raise HTTPException(status_code=500, detail="Тапсырма жасалмады")
     return task
 
 
@@ -317,8 +683,9 @@ def update_task_record(task_id: int, task_data: dict[str, Any]) -> dict[str, Any
         """
         UPDATE tasks
         SET title = ?, description = ?, prompt = ?, answer = ?, grade_level = ?,
-            category = ?, difficulty = ?, status = ?, image_url = ?, estimated_minutes = ?,
-            badge = ?, badge_tone = ?, kind = ?, question_type = ?, choices_json = ?,
+            category = ?, difficulty = ?, status = ?, image_url = ?, document_url = ?,
+            document_name = ?, estimated_minutes = ?, badge = ?, badge_tone = ?, kind = ?,
+            question_type = ?, choices_json = ?, content_html = ?,
             updated_at = ?
         WHERE id = ?;
         """,
@@ -332,33 +699,39 @@ def update_task_record(task_id: int, task_data: dict[str, Any]) -> dict[str, Any
             task_data["difficulty"],
             task_data["status"],
             task_data["image_url"],
+            task_data["document_url"],
+            task_data["document_name"],
             task_data["estimated_minutes"],
             task_data["badge"],
             task_data["badge_tone"],
             task_data["kind"],
             task_data["question_type"],
             task_data["choices_json"],
+            task_data["content_html"],
             now,
             task_id,
         ),
     )
     task = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (task_id,))
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Тапсырма табылмады")
     return task
+
+
+def save_upload_bytes(content: bytes, filename: str, content_type: str | None = None) -> str:
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(status_code=413, detail="Жүктелген файл тым үлкен")
+    suffix = Path(filename).suffix.lower() or mimetypes.guess_extension(content_type or "") or ".bin"
+    stored_name = f"{uuid4().hex}{suffix}"
+    destination = settings.uploads_dir / stored_name
+    destination.write_bytes(content)
+    return f"/uploads/{stored_name}"
 
 
 def save_upload(file: UploadFile | None) -> str | None:
     if file is None or not file.filename:
         return None
-    content = file.file.read()
-    if len(content) > settings.max_upload_size_bytes:
-        raise HTTPException(status_code=413, detail="Uploaded file is too large")
-    suffix = Path(file.filename).suffix.lower() or mimetypes.guess_extension(file.content_type or "") or ".bin"
-    filename = f"{uuid4().hex}{suffix}"
-    destination = settings.uploads_dir / filename
-    destination.write_bytes(content)
-    return f"/uploads/{filename}"
+    return save_upload_bytes(file.file.read(), file.filename, file.content_type)
 
 
 @app.get("/health")
@@ -454,7 +827,7 @@ def get_student_test(
         return cached
     task = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (task_id,))
     if task is None or task["status"] != "active":
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Тапсырма табылмады")
     ordered_tasks = db.fetchall(
         """
         SELECT id
@@ -484,7 +857,7 @@ def get_student_test(
             "totalQuestions": total_questions,
             "timeRemaining": f"{max(task['estimated_minutes'] - 1, 1):02d}:00",
             "progressPercent": round((question_number / total_questions) * 100),
-            "hintText": "Select one answer." if task["question_type"] == "choice" else "Find the number pattern.",
+            "hintText": "Бір жауапты таңдаңыз." if task["question_type"] == "choice" else "Заңдылықты табыңыз.",
         },
         "lastSubmission": {
             "answer": last_submission["submitted_answer"],
@@ -503,14 +876,15 @@ def submit_student_test(
 ) -> dict[str, Any]:
     task = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (task_id,))
     if task is None or task["status"] != "active":
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Тапсырма табылмады")
     submitted_answer = payload.answer.strip()
     expected = task["answer"].strip()
     if task["question_type"] == "choice":
         choices = json.loads(task["choices_json"]) if task["choices_json"] else []
         if submitted_answer not in choices:
-            raise HTTPException(status_code=422, detail="Choose one of the listed options")
-    is_correct = submitted_answer.lower() == expected.lower()
+            raise HTTPException(status_code=422, detail="Берілген нұсқалардың бірін таңдаңыз")
+    open_response = task["kind"] == "docx" or len(expected) > 80 or "мұғалім тексереді" in expected.lower()
+    is_correct = True if open_response else submitted_answer.lower() == expected.lower()
     score = 100 if is_correct else 0
     db.execute(
         """
@@ -526,8 +900,50 @@ def submit_student_test(
         "expectedAnswer": expected,
         "isCorrect": is_correct,
         "score": score,
-        "message": "Correct" if is_correct else f"Incorrect. Correct answer: {expected}",
+        "message": (
+            "Жауап қабылданды. Мұғалім шешу жолын тексереді."
+            if open_response
+            else "Дұрыс!" if is_correct else f"Әзірге қате. Дұрыс жауап: {expected}"
+        ),
     }
+
+
+def build_hint(task: dict[str, Any], level: int, current_answer: str | None) -> str:
+    category = task["category"].lower()
+    prompt = task["prompt"]
+    answer = task["answer"].strip()
+    attempt = normalize_space(current_answer or "")
+    if level <= 1:
+        if task["question_type"] == "choice":
+            return "Алдымен шарттағы кілт сөздерді белгіле. Әр нұсқаны сол шартпен жеке салыстыр."
+        return "Есепті бірден шығаруға асықпа: берілгендерін, сұралғанын және қандай тәсіл керек екенін бөлек жаз."
+    if level == 2:
+        if "инвариант" in category or "монвариант" in category:
+            return "Қай шама өзгермей қалатынын немесе бір бағытта ғана өзгеретінін ізде. Әр амалдан кейін сол шаманы тексер."
+        if "санау" in category or "комбинатор" in category or "рамсей" in category:
+            return "Бір объектіні екі түрлі жолмен санап көр. Қатар, баған, жұп немесе байланыс саны бірдей нәтиже беруі мүмкін."
+        if "логика" in category:
+            return "Шарттарды кестеге түсір. Қайшылық туған нұсқаларды сызып тастап, қалған мүмкіндікті тексер."
+        return f"Мына сөйлемге сүйен: «{truncate_text(prompt, 120)}». Шешімнің негізгі амалы осы шарттан басталады."
+    if attempt:
+        if attempt.lower() == answer.lower():
+            return "Жауабың дұрыс көрінеді. Енді шешу жолын толық және ретімен жаз."
+        return "Жауабыңды соңғы шартпен қайта тексер. Егер бір шарт орындалмаса, шешімді сол жерден түзет."
+    return "Соңғы қадамда тек нәтижені емес, неге дәл солай болатынын дәлелде. Жауапты қысқа жаз, дәлелдеуді бөлек көрсет."
+
+
+@app.post(f"{settings.api_prefix}/student/tests/{{task_id}}/hint")
+def get_student_hint(
+    task_id: int,
+    payload: HintPayload,
+    user: dict[str, Any] = Depends(require_role("student")),
+) -> dict[str, Any]:
+    del user
+    task = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (task_id,))
+    if task is None or task["status"] != "active":
+        raise HTTPException(status_code=404, detail="Тапсырма табылмады")
+    level = max(1, min(payload.level, 3))
+    return {"hint": build_hint(task, level, payload.current_answer), "level": level}
 
 
 @app.get(f"{settings.api_prefix}/admin/dashboard")
@@ -628,9 +1044,11 @@ def create_task(
     question_type: str = Form("numeric"),
     choices_json: str | None = Form(default=None),
     image: UploadFile | None = File(default=None),
+    document: UploadFile | None = File(default=None),
     user: dict[str, Any] = Depends(require_role("admin")),
 ) -> dict[str, Any]:
     image_url = save_upload(image)
+    document_url = save_upload(document)
     task = insert_task_record(
         validate_task_payload(
             {
@@ -647,6 +1065,8 @@ def create_task(
                 "choices_json": choices_json,
             },
             image_url=image_url,
+            document_url=document_url,
+            document_name=document.filename if document and document.filename else None,
         ),
         user["id"],
     )
@@ -669,12 +1089,14 @@ def update_task(
     question_type: str = Form("numeric"),
     choices_json: str | None = Form(default=None),
     image: UploadFile | None = File(default=None),
+    document: UploadFile | None = File(default=None),
     user: dict[str, Any] = Depends(require_role("admin")),
 ) -> dict[str, Any]:
     existing = db.fetchone("SELECT * FROM tasks WHERE id = ? LIMIT 1;", (task_id,))
     if existing is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Тапсырма табылмады")
     image_url = save_upload(image) if image is not None else None
+    document_url = save_upload(document) if document is not None else None
     task = update_task_record(
         task_id,
         validate_task_payload(
@@ -693,6 +1115,8 @@ def update_task(
             },
             existing=existing,
             image_url=image_url,
+            document_url=document_url,
+            document_name=document.filename if document and document.filename else None,
         ),
     )
     response_cache.clear()
@@ -705,11 +1129,11 @@ def import_tasks_json(
     user: dict[str, Any] = Depends(require_role("admin")),
 ) -> dict[str, Any]:
     if not file.filename:
-        raise HTTPException(status_code=422, detail="JSON file is required")
+        raise HTTPException(status_code=422, detail="JSON файлын таңдаңыз")
     try:
         raw_payload = json.loads(file.file.read().decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=422, detail="Invalid JSON file") from exc
+        raise HTTPException(status_code=422, detail="JSON файлы дұрыс емес") from exc
     if isinstance(raw_payload, dict) and isinstance(raw_payload.get("tasks"), list):
         records = raw_payload["tasks"]
     elif isinstance(raw_payload, list):
@@ -717,7 +1141,59 @@ def import_tasks_json(
     elif isinstance(raw_payload, dict):
         records = [raw_payload]
     else:
-        raise HTTPException(status_code=422, detail="JSON must contain an object or array")
+        raise HTTPException(status_code=422, detail="JSON ішінде объект немесе тізім болуы керек")
+    created_items = [
+        normalize_task(insert_task_record(validate_task_payload(record), user["id"]))
+        for record in records
+    ]
+    response_cache.clear()
+    return {"count": len(created_items), "items": created_items}
+
+
+@app.post(f"{settings.api_prefix}/admin/tasks/import-html")
+def import_tasks_html(
+    files: list[UploadFile] = File(...),
+    user: dict[str, Any] = Depends(require_role("admin")),
+) -> dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=422, detail="HTML файлын таңдаңыз")
+    records: list[dict[str, Any]] = []
+    for uploaded_file in files:
+        if not uploaded_file.filename:
+            raise HTTPException(status_code=422, detail="HTML файлын таңдаңыз")
+        suffix = Path(uploaded_file.filename).suffix.lower()
+        if suffix not in {".html", ".htm"}:
+            raise HTTPException(status_code=422, detail="Тек HTML файлдарын импорттауға болады")
+        try:
+            raw_html = uploaded_file.file.read().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=422, detail=f"{uploaded_file.filename} UTF-8 форматында емес") from exc
+        records.extend(parse_html_tasks(raw_html, uploaded_file.filename))
+    created_items = [
+        normalize_task(insert_task_record(validate_task_payload(record), user["id"]))
+        for record in records
+    ]
+    response_cache.clear()
+    return {"count": len(created_items), "items": created_items}
+
+
+@app.post(f"{settings.api_prefix}/admin/tasks/import-docx")
+def import_tasks_docx(
+    files: list[UploadFile] = File(...),
+    user: dict[str, Any] = Depends(require_role("admin")),
+) -> dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=422, detail="DOCX файлын таңдаңыз")
+    records: list[dict[str, Any]] = []
+    for uploaded_file in files:
+        if not uploaded_file.filename:
+            raise HTTPException(status_code=422, detail="DOCX файлын таңдаңыз")
+        suffix = Path(uploaded_file.filename).suffix.lower()
+        if suffix != ".docx":
+            raise HTTPException(status_code=422, detail="Тек DOCX файлдарын импорттауға болады")
+        content = uploaded_file.file.read()
+        document_url = save_upload_bytes(content, uploaded_file.filename, uploaded_file.content_type)
+        records.extend(parse_docx_tasks(content, uploaded_file.filename, document_url))
     created_items = [
         normalize_task(insert_task_record(validate_task_payload(record), user["id"]))
         for record in records
@@ -741,5 +1217,5 @@ def delete_task(
 def serve_uploaded_file(filename: str) -> FileResponse:
     path = settings.uploads_dir / filename
     if not path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail="Файл табылмады")
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})

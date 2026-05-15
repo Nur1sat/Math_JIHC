@@ -1,18 +1,21 @@
-# Math_JIHC
+# math_Mindset
 
-A greenfield full-stack implementation of the provided student/admin math learning screens:
+Оқушы мен мұғалімге арналған толық стек математика оқу платформасы:
 
 - `frontend/`: Next.js App Router frontend in React + Tailwind
 - `backend/`: FastAPI backend with SQLite, task upload, auth, dashboard data, and cached read endpoints
 
-## Included flows
+## Қамтылған мүмкіндіктер
 
-- Student login
-- Student dashboard
-- Student test interface
-- Admin login
-- Admin dashboard
-- Admin task management with create, edit, delete, and image upload
+- Оқушыға кіру
+- Оқушы панелі
+- Жауап жазылатын quiz форматындағы тапсырма беті
+- Токенсіз жергілікті көмекші hint батырмасы
+- Әкімшіге кіру
+- Әкімші панелі
+- Тапсырманы қосу, өңдеу, өшіру
+- Сурет, HTML, JSON және DOCX импорттау
+- Қолмен қосылған тапсырмаға DOCX файл тіркеу
 
 ## Performance work
 
@@ -24,10 +27,10 @@ A greenfield full-stack implementation of the provided student/admin math learni
 - SQLite WAL mode and indexes for hot lookup paths
 - GZip enabled in FastAPI
 
-## Demo accounts
+## Демо аккаунттар
 
-- Student: `student@oasis.edu` / `student123`
-- Admin: `admin@mathacademy.edu` / `admin123`
+- Оқушы: `student@oasis.edu` / `student123`
+- Әкімші: `admin@mathacademy.edu` / `admin123`
 
 ## Run backend
 
@@ -52,11 +55,11 @@ npm run dev
 
 The app runs on `http://127.0.0.1:3000`.
 
-## Notes
+## Ескертпелер
 
-- Uploaded task images are stored in `backend/uploads/`.
-- SQLite is stored in `backend/data.sqlite3` and is auto-seeded on first boot.
-- The frontend proxy expects the backend at `NEXT_SERVER_API_URL`.
+- Жүктелген суреттер мен DOCX файлдар `backend/uploads/` ішінде сақталады.
+- SQLite дерегі `backend/data.sqlite3` ішінде сақталады және бірінші іске қосқанда автоматты толтырылады.
+- Frontend proxy backend мекенжайын `NEXT_SERVER_API_URL` арқылы алады.
 
 ## Deployment
 

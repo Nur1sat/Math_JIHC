@@ -43,20 +43,20 @@ export function BrandIdentity({
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <img
-        alt="Math_JIHC logo"
+        alt="math_Mindset логотипі"
         className={compact ? "h-9 w-9 object-contain" : "h-11 w-11 object-contain"}
         src="/math_jihc-logo.svg"
       />
       <div className="min-w-0">
         <p className={cn("font-black tracking-tight", compact ? "text-lg" : "text-2xl", light ? "text-white" : "text-green-800")}>
-          Math_JIHC
+          math_Mindset
         </p>
       </div>
     </div>
   );
 }
 
-export function LoadingPanel({ label = "Loading..." }: { label?: string }) {
+export function LoadingPanel({ label = "Жүктелуде..." }: { label?: string }) {
   return (
     <div className="rounded-[2rem] border border-outline-variant/30 bg-surface-container-lowest p-8 shadow-soft">
       <div className="flex items-center gap-3 text-secondary">
@@ -91,7 +91,7 @@ export function ShellFooter() {
   return (
     <footer className="w-full border-t border-slate-200/50 bg-slate-100 py-8">
       <div className="mx-auto flex max-w-7xl items-center justify-center px-8 text-sm text-slate-500">
-        <p>© 2026 Math_JIHC</p>
+        <p>© 2026 math_Mindset</p>
       </div>
     </footer>
   );

@@ -6,8 +6,8 @@ import { clearSession, useSession } from "@/lib/session";
 import { BrandIdentity, MaterialIcon, ShellFooter, cn } from "@/components/ui";
 
 const items = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard", key: "dashboard" },
-  { href: "/admin/tasks", label: "Tasks", icon: "quiz", key: "tasks" }
+  { href: "/admin/dashboard", label: "Басқару", icon: "dashboard", key: "dashboard" },
+  { href: "/admin/tasks", label: "Тапсырмалар", icon: "quiz", key: "tasks" }
 ];
 
 export function AdminShell({
@@ -51,7 +51,7 @@ export function AdminShell({
             href="/admin/tasks"
           >
             <MaterialIcon icon="add" />
-            <span>Add Task</span>
+            <span>Тапсырма қосу</span>
           </Link>
         </div>
       </aside>
@@ -65,10 +65,10 @@ export function AdminShell({
               <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
                 <div className="hidden text-right sm:block">
                   <p className="text-sm font-bold leading-none">
-                    {session?.user.fullName ?? "Admin User"}
+                    {session?.user.fullName ?? "Әкімші"}
                   </p>
                   <p className="text-[10px] font-semibold tracking-tight text-green-600">
-                    ADMINISTRATOR
+                    ӘКІМШІ
                   </p>
                 </div>
                 <img
@@ -87,7 +87,7 @@ export function AdminShell({
                   }}
                   type="button"
                 >
-                  Logout
+                  Шығу
                 </button>
               </div>
             </div>

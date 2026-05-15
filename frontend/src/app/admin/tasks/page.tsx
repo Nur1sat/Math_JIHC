@@ -27,16 +27,16 @@ const emptyForm: TaskFormState = {
   description: "",
   prompt: "",
   answer: "",
-  gradeLevel: "Grade 1",
-  category: "Logic",
-  difficulty: "Beginner",
+  gradeLevel: "7-сынып",
+  category: "Логика",
+  difficulty: "Бастапқы",
   status: "draft",
   estimatedMinutes: "15",
   questionType: "numeric",
   choices: ""
 };
 
-function buildFormData(form: TaskFormState, file: File | null) {
+function buildFormData(form: TaskFormState, imageFile: File | null, documentFile: File | null) {
   const formData = new FormData();
   formData.set("title", form.title);
   formData.set("description", form.description);
@@ -59,8 +59,11 @@ function buildFormData(form: TaskFormState, file: File | null) {
       )
     );
   }
-  if (file) {
-    formData.set("image", file);
+  if (imageFile) {
+    formData.set("image", imageFile);
+  }
+  if (documentFile) {
+    formData.set("document", documentFile);
   }
   return formData;
 }
@@ -83,7 +86,7 @@ function hydrateForm(task: TaskItem): TaskFormState {
 
 export default function AdminTasksPage() {
   const { ready } = useProtectedRoute("admin", "/admin/login");
-  const [mode, setMode] = useState<"manual" | "json">("manual");
+  const [mode, setMode] = useState<"manual" | "json" | "html" | "docx">("manual");
   const [data, setData] = useState<TaskListPayload | null>(null);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -91,7 +94,10 @@ export default function AdminTasksPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [jsonFile, setJsonFile] = useState<File | null>(null);
+  const [htmlFiles, setHtmlFiles] = useState<File[]>([]);
+  const [docxFiles, setDocxFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -108,7 +114,7 @@ export default function AdminTasksPage() {
         setError(null);
       })
       .catch((requestError) =>
-        setError(requestError instanceof Error ? requestError.message : "Unable to load tasks")
+        setError(requestError instanceof Error ? requestError.message : "Тапсырмалар жүктелмеді")
       )
       .finally(() => setLoading(false));
   }, [deferredSearch, ready]);
@@ -118,6 +124,7 @@ export default function AdminTasksPage() {
     setForm(emptyForm);
     setImageFile(null);
     setImagePreview(null);
+    setDocumentFile(null);
   }
 
   function refreshList() {
@@ -126,7 +133,7 @@ export default function AdminTasksPage() {
         .getAdminTasks(deferredSearch)
         .then(setData)
         .catch((requestError) =>
-          setError(requestError instanceof Error ? requestError.message : "Unable to refresh tasks")
+          setError(requestError instanceof Error ? requestError.message : "Тізімді жаңарту мүмкін болмады")
         );
     });
   }
@@ -136,7 +143,7 @@ export default function AdminTasksPage() {
     setSaving(true);
     setError(null);
     try {
-      const payload = buildFormData(form, imageFile);
+      const payload = buildFormData(form, imageFile, documentFile);
       if (editingId) {
         await apiClient.updateTask(editingId, payload);
       } else {
@@ -145,7 +152,7 @@ export default function AdminTasksPage() {
       resetManual();
       refreshList();
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Unable to save task");
+      setError(submissionError instanceof Error ? submissionError.message : "Тапсырманы сақтау мүмкін болмады");
     } finally {
       setSaving(false);
     }
@@ -154,7 +161,7 @@ export default function AdminTasksPage() {
   async function handleJsonImport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!jsonFile) {
-      setError("Select a JSON file");
+      setError("JSON файлын таңдаңыз");
       return;
     }
     setSaving(true);
@@ -167,7 +174,53 @@ export default function AdminTasksPage() {
       refreshList();
     } catch (submissionError) {
       setError(
-        submissionError instanceof Error ? submissionError.message : "Unable to import JSON"
+        submissionError instanceof Error ? submissionError.message : "JSON импорттау мүмкін болмады"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleHtmlImport(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!htmlFiles.length) {
+      setError("Кемінде бір HTML файлын таңдаңыз");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = new FormData();
+      htmlFiles.forEach((file) => payload.append("files", file));
+      await apiClient.importTasksHtml(payload);
+      setHtmlFiles([]);
+      refreshList();
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error ? submissionError.message : "HTML импорттау мүмкін болмады"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDocxImport(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!docxFiles.length) {
+      setError("Кемінде бір DOCX файлын таңдаңыз");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = new FormData();
+      docxFiles.forEach((file) => payload.append("files", file));
+      await apiClient.importTasksDocx(payload);
+      setDocxFiles([]);
+      refreshList();
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error ? submissionError.message : "DOCX импорттау мүмкін болмады"
       );
     } finally {
       setSaving(false);
@@ -175,7 +228,7 @@ export default function AdminTasksPage() {
   }
 
   async function handleDelete(taskId: number) {
-    if (!window.confirm("Delete this task?")) {
+    if (!window.confirm("Бұл тапсырманы өшіресіз бе?")) {
       return;
     }
     try {
@@ -185,7 +238,7 @@ export default function AdminTasksPage() {
         resetManual();
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to delete task");
+      setError(requestError instanceof Error ? requestError.message : "Тапсырманы өшіру мүмкін болмады");
     }
   }
 
@@ -194,7 +247,7 @@ export default function AdminTasksPage() {
       <div className="mx-auto w-full max-w-7xl p-6 md:p-10">
         <div className="mb-8">
           <h2 className="text-[2.5rem] font-black tracking-tight text-on-surface">
-            Task Management
+            Тапсырмаларды басқару
           </h2>
         </div>
         {error ? (
@@ -206,7 +259,7 @@ export default function AdminTasksPage() {
           <section className="rounded-xl bg-surface-container-lowest p-8 shadow-soft lg:col-span-5">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-xl font-black text-on-surface">
-                {editingId ? "Edit Task" : "Add Task"}
+                {editingId ? "Тапсырманы өңдеу" : "Тапсырма қосу"}
               </h3>
               <div className="flex rounded-full bg-surface-container p-1">
                 <button
@@ -216,7 +269,7 @@ export default function AdminTasksPage() {
                   onClick={() => setMode("manual")}
                   type="button"
                 >
-                  Vruchnuyu
+                  Қолмен
                 </button>
                 <button
                   className={`rounded-full px-4 py-2 text-sm font-bold ${
@@ -228,13 +281,37 @@ export default function AdminTasksPage() {
                   }}
                   type="button"
                 >
-                  JSON file
+                  JSON
+                </button>
+                <button
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${
+                    mode === "html" ? "bg-primary text-on-primary" : "text-secondary"
+                  }`}
+                  onClick={() => {
+                    setMode("html");
+                    setEditingId(null);
+                  }}
+                  type="button"
+                >
+                  HTML
+                </button>
+                <button
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${
+                    mode === "docx" ? "bg-primary text-on-primary" : "text-secondary"
+                  }`}
+                  onClick={() => {
+                    setMode("docx");
+                    setEditingId(null);
+                  }}
+                  type="button"
+                >
+                  DOCX
                 </button>
               </div>
             </div>
             {mode === "manual" ? (
               <form className="space-y-6" onSubmit={handleManualSubmit}>
-                <Field label="Title">
+                <Field label="Атауы">
                   <input
                     className={inputClass}
                     onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
@@ -242,7 +319,7 @@ export default function AdminTasksPage() {
                     value={form.title}
                   />
                 </Field>
-                <Field label="Description">
+                <Field label="Сипаттама">
                   <textarea
                     className={inputClass}
                     onChange={(event) =>
@@ -252,7 +329,7 @@ export default function AdminTasksPage() {
                     value={form.description}
                   />
                 </Field>
-                <Field label="Prompt">
+                <Field label="Сұрақ">
                   <textarea
                     className={inputClass}
                     onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))}
@@ -261,7 +338,7 @@ export default function AdminTasksPage() {
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Answer">
+                  <Field label="Жауап">
                     <input
                       className={inputClass}
                       onChange={(event) => setForm((current) => ({ ...current, answer: event.target.value }))}
@@ -269,7 +346,7 @@ export default function AdminTasksPage() {
                       value={form.answer}
                     />
                   </Field>
-                  <Field label="Grade">
+                  <Field label="Сынып">
                     <select
                       className={inputClass}
                       onChange={(event) =>
@@ -277,15 +354,16 @@ export default function AdminTasksPage() {
                       }
                       value={form.gradeLevel}
                     >
-                      <option>Grade 1</option>
-                      <option>Grade 2</option>
-                      <option>Grade 3</option>
-                      <option>Grade 4</option>
+                      <option>7-сынып</option>
+                      <option>8-сынып</option>
+                      <option>9-сынып</option>
+                      <option>10-сынып</option>
+                      <option>11-сынып</option>
                     </select>
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Category">
+                  <Field label="Тақырып">
                     <input
                       className={inputClass}
                       onChange={(event) =>
@@ -295,7 +373,7 @@ export default function AdminTasksPage() {
                       value={form.category}
                     />
                   </Field>
-                  <Field label="Difficulty">
+                  <Field label="Деңгей">
                     <select
                       className={inputClass}
                       onChange={(event) =>
@@ -303,24 +381,24 @@ export default function AdminTasksPage() {
                       }
                       value={form.difficulty}
                     >
-                      <option>Beginner</option>
-                      <option>Intermediate</option>
-                      <option>Advanced</option>
+                      <option>Бастапқы</option>
+                      <option>Орташа</option>
+                      <option>Күрделі</option>
                     </select>
                   </Field>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                  <Field label="Status">
+                  <Field label="Күйі">
                     <select
                       className={inputClass}
                       onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
                       value={form.status}
                     >
-                      <option value="draft">Draft</option>
-                      <option value="active">Active</option>
+                      <option value="draft">Жоба</option>
+                      <option value="active">Белсенді</option>
                     </select>
                   </Field>
-                  <Field label="Minutes">
+                  <Field label="Минут">
                     <input
                       className={inputClass}
                       min="1"
@@ -331,7 +409,7 @@ export default function AdminTasksPage() {
                       value={form.estimatedMinutes}
                     />
                   </Field>
-                  <Field label="Type">
+                  <Field label="Түрі">
                     <select
                       className={inputClass}
                       onChange={(event) =>
@@ -342,13 +420,13 @@ export default function AdminTasksPage() {
                       }
                       value={form.questionType}
                     >
-                      <option value="numeric">Numeric</option>
-                      <option value="choice">Choice</option>
+                      <option value="numeric">Жауап жазу</option>
+                      <option value="choice">Таңдау</option>
                     </select>
                   </Field>
                 </div>
                 {form.questionType === "choice" ? (
-                  <Field label="Choices">
+                  <Field label="Нұсқалар">
                     <input
                       className={inputClass}
                       onChange={(event) =>
@@ -360,11 +438,11 @@ export default function AdminTasksPage() {
                     />
                   </Field>
                 ) : null}
-                <Field label="Image">
+                <Field label="Сурет">
                   <label className="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant p-8 transition-colors hover:bg-surface-container-low">
                     <MaterialIcon className="mb-2 text-4xl text-outline" icon="cloud_upload" />
                     <p className="text-sm font-medium text-secondary">
-                      {imageFile ? imageFile.name : "Upload image"}
+                      {imageFile ? imageFile.name : "Сурет жүктеу"}
                     </p>
                     <input
                       className="absolute inset-0 opacity-0"
@@ -378,31 +456,45 @@ export default function AdminTasksPage() {
                   </label>
                 </Field>
                 {imagePreview ? (
-                  <img alt="Task preview" className="max-h-48 rounded-2xl object-cover" src={imagePreview} />
+                  <img alt="Тапсырма суреті" className="max-h-48 rounded-2xl object-cover" src={imagePreview} />
                 ) : null}
+                <Field label="DOCX файл">
+                  <label className="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant p-8 transition-colors hover:bg-surface-container-low">
+                    <MaterialIcon className="mb-2 text-4xl text-outline" icon="description" />
+                    <p className="text-center text-sm font-medium text-secondary">
+                      {documentFile ? documentFile.name : "Тапсырмаға DOCX тіркеу"}
+                    </p>
+                    <input
+                      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      className="absolute inset-0 opacity-0"
+                      onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
+                      type="file"
+                    />
+                  </label>
+                </Field>
                 <div className="flex gap-4">
                   <button
                     className="flex-1 rounded-full bg-gradient-to-r from-primary to-primary-container py-4 font-bold text-on-primary shadow-lg transition-all hover:brightness-105 active:scale-95"
                     disabled={saving}
                     type="submit"
                   >
-                    {saving ? "Saving..." : editingId ? "Update" : "Save"}
+                    {saving ? "Сақталуда..." : editingId ? "Жаңарту" : "Сақтау"}
                   </button>
                   <button
                     className="rounded-full bg-secondary-container px-8 font-bold text-on-secondary-container transition-all hover:brightness-95"
                     onClick={resetManual}
                     type="button"
                   >
-                    Reset
+                    Тазарту
                   </button>
                 </div>
               </form>
-            ) : (
+            ) : mode === "json" ? (
               <form className="space-y-6" onSubmit={handleJsonImport}>
                 <label className="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant p-10 transition-colors hover:bg-surface-container-low">
                   <MaterialIcon className="mb-2 text-4xl text-outline" icon="upload_file" />
                   <p className="text-sm font-medium text-secondary">
-                    {jsonFile ? jsonFile.name : "Upload JSON"}
+                    {jsonFile ? jsonFile.name : "JSON жүктеу"}
                   </p>
                   <input
                     accept=".json,application/json"
@@ -416,7 +508,57 @@ export default function AdminTasksPage() {
                   disabled={saving}
                   type="submit"
                 >
-                  {saving ? "Importing..." : "Import"}
+                  {saving ? "Импортталуда..." : "Импорттау"}
+                </button>
+              </form>
+            ) : mode === "html" ? (
+              <form className="space-y-6" onSubmit={handleHtmlImport}>
+                <label className="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant p-10 transition-colors hover:bg-surface-container-low">
+                  <MaterialIcon className="mb-2 text-4xl text-outline" icon="html" />
+                  <p className="text-center text-sm font-medium text-secondary">
+                    {htmlFiles.length
+                      ? htmlFiles.map((file) => file.name).join(", ")
+                      : "HTML файлдарын жүктеу"}
+                  </p>
+                  <input
+                    accept=".html,.htm,text/html"
+                    className="absolute inset-0 opacity-0"
+                    multiple
+                    onChange={(event) => setHtmlFiles(Array.from(event.target.files ?? []))}
+                    type="file"
+                  />
+                </label>
+                <button
+                  className="w-full rounded-full bg-gradient-to-r from-primary to-primary-container py-4 font-bold text-on-primary shadow-lg transition-all hover:brightness-105 active:scale-95"
+                  disabled={saving}
+                  type="submit"
+                >
+                  {saving ? "Импортталуда..." : "HTML импорттау"}
+                </button>
+              </form>
+            ) : (
+              <form className="space-y-6" onSubmit={handleDocxImport}>
+                <label className="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant p-10 transition-colors hover:bg-surface-container-low">
+                  <MaterialIcon className="mb-2 text-4xl text-outline" icon="description" />
+                  <p className="text-center text-sm font-medium text-secondary">
+                    {docxFiles.length
+                      ? docxFiles.map((file) => file.name).join(", ")
+                      : "DOCX файлдарын жүктеу"}
+                  </p>
+                  <input
+                    accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="absolute inset-0 opacity-0"
+                    multiple
+                    onChange={(event) => setDocxFiles(Array.from(event.target.files ?? []))}
+                    type="file"
+                  />
+                </label>
+                <button
+                  className="w-full rounded-full bg-gradient-to-r from-primary to-primary-container py-4 font-bold text-on-primary shadow-lg transition-all hover:brightness-105 active:scale-95"
+                  disabled={saving}
+                  type="submit"
+                >
+                  {saving ? "Импортталуда..." : "DOCX импорттау"}
                 </button>
               </form>
             )}
@@ -424,9 +566,9 @@ export default function AdminTasksPage() {
           <section className="overflow-hidden rounded-xl bg-surface-container-low lg:col-span-7">
             <div className="flex items-end justify-between p-8 pb-4">
               <div>
-                <h3 className="text-xl font-black text-on-surface">Tasks</h3>
+                <h3 className="text-xl font-black text-on-surface">Тапсырмалар</h3>
                 <p className="text-sm text-secondary">
-                  {data?.summary.total ?? 0} total · {data?.summary.active ?? 0} active · {data?.summary.drafts ?? 0} drafts
+                  Барлығы: {data?.summary.total ?? 0} · Белсенді: {data?.summary.active ?? 0} · Жоба: {data?.summary.drafts ?? 0}
                 </p>
               </div>
               <div className="relative w-full max-w-xs">
@@ -434,7 +576,7 @@ export default function AdminTasksPage() {
                 <input
                   className="w-full rounded-full bg-white py-2 pl-10 pr-4 text-sm outline-none ring-primary/20 transition-all focus:ring-2"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search"
+                  placeholder="Іздеу"
                   type="text"
                   value={search}
                 />
@@ -442,7 +584,7 @@ export default function AdminTasksPage() {
             </div>
             {loading && !data ? (
               <div className="p-8">
-                <LoadingPanel label="Loading..." />
+                <LoadingPanel label="Жүктелуде..." />
               </div>
             ) : null}
             <div className="space-y-3 px-8 pb-8">
@@ -462,7 +604,7 @@ export default function AdminTasksPage() {
                   </div>
                   <span className="text-sm text-secondary">{task.category}</span>
                   <span className={`text-sm font-bold ${task.status === "active" ? "text-primary" : "text-secondary"}`}>
-                    {task.status}
+                    {task.status === "active" ? "Белсенді" : "Жоба"}
                   </span>
                   <div className="flex justify-end gap-2">
                     <button
@@ -473,6 +615,7 @@ export default function AdminTasksPage() {
                         setForm(hydrateForm(task));
                         setImageFile(null);
                         setImagePreview(task.imageUrl);
+                        setDocumentFile(null);
                       }}
                       type="button"
                     >
@@ -490,7 +633,7 @@ export default function AdminTasksPage() {
               ))}
               {!data?.items.length && !loading ? (
                 <div className="rounded-2xl bg-surface-container-lowest p-8 text-center text-secondary">
-                  No tasks.
+                  Тапсырма жоқ.
                 </div>
               ) : null}
             </div>

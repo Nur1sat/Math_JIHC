@@ -24,19 +24,19 @@ export default function StudentLoginPage() {
               <BrandIdentity light />
             </div>
             <h1 className="max-w-xl text-4xl font-black leading-tight md:text-5xl lg:text-6xl">
-              Student
+              Математикалық ойлау
             </h1>
-            <p className="mt-6 max-w-md text-lg text-primary-fixed">Sign in and continue.</p>
+            <p className="mt-6 max-w-md text-lg text-primary-fixed">Кіріп, тапсырмаларды жалғастырыңыз.</p>
           </div>
           <div className="relative z-10 mt-12 flex justify-center lg:justify-start">
             <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/10 p-8 backdrop-blur">
               <div className="mb-8 flex items-center justify-center rounded-[2rem] bg-white/90 p-10">
-                <img alt="Math_JIHC logo" className="h-40 w-40 object-contain" src="/math_jihc-logo.svg" />
+                <img alt="math_Mindset логотипі" className="h-40 w-40 object-contain" src="/math_jihc-logo.svg" />
               </div>
               <div className="grid grid-cols-3 gap-3 text-center text-sm font-bold">
-                <div className="rounded-2xl bg-white/10 px-4 py-5">Tasks</div>
-                <div className="rounded-2xl bg-white/10 px-4 py-5">Results</div>
-                <div className="rounded-2xl bg-white/10 px-4 py-5">Progress</div>
+                <div className="rounded-2xl bg-white/10 px-4 py-5">Тапсырма</div>
+                <div className="rounded-2xl bg-white/10 px-4 py-5">Нәтиже</div>
+                <div className="rounded-2xl bg-white/10 px-4 py-5">Даму</div>
               </div>
             </div>
           </div>
@@ -44,15 +44,15 @@ export default function StudentLoginPage() {
         <section className="flex items-center bg-white p-8 lg:col-span-5 lg:p-16">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-8 flex items-center justify-between">
-              <h2 className="text-3xl font-black text-on-surface">Student</h2>
+              <h2 className="text-3xl font-black text-on-surface">Оқушы</h2>
               <Link className="text-sm font-bold text-primary" href="/admin/login">
-                Admin
+                Әкімші
               </Link>
             </div>
             <LoginForm
               redirectTo="/student/dashboard"
               role="student"
-              submitLabel="Enter"
+              submitLabel="Кіру"
               title=""
             />
           </div>

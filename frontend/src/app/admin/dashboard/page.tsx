@@ -21,30 +21,30 @@ export default function AdminDashboardPage() {
       .getAdminDashboard()
       .then(setData)
       .catch((requestError) =>
-        setError(requestError instanceof Error ? requestError.message : "Unable to load dashboard")
+        setError(requestError instanceof Error ? requestError.message : "Панель жүктелмеді")
       );
   }, [ready]);
 
   return (
     <AdminShell active="dashboard">
       <section className="mx-auto max-w-7xl px-8 py-8">
-        {!ready || (!data && !error) ? <LoadingPanel label="Loading..." /> : null}
+        {!ready || (!data && !error) ? <LoadingPanel label="Жүктелуде..." /> : null}
         {error ? <ErrorPanel message={error} /> : null}
         {data ? (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-black text-on-surface">Admin Dashboard</h2>
+              <h2 className="text-3xl font-black text-on-surface">Әкімші панелі</h2>
             </div>
             <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-5">
-              <MetricCard label="Students" value={data.metrics.activeStudents} />
-              <MetricCard label="Tasks" value={data.metrics.totalTests} />
-              <MetricCard label="Active" value={data.metrics.activeTasks} />
-              <MetricCard label="Drafts" value={data.metrics.draftTasks} />
-              <MetricCard accent label="Avg. Score" value={`${data.metrics.averageScore}%`} />
+              <MetricCard label="Оқушылар" value={data.metrics.activeStudents} />
+              <MetricCard label="Тапсырмалар" value={data.metrics.totalTests} />
+              <MetricCard label="Белсенді" value={data.metrics.activeTasks} />
+              <MetricCard label="Жоба" value={data.metrics.draftTasks} />
+              <MetricCard accent label="Орташа балл" value={`${data.metrics.averageScore}%`} />
             </div>
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
               <section className="rounded-2xl bg-surface-container-lowest p-8 shadow-soft">
-                <h3 className="mb-6 text-xl font-black text-on-surface">Recent Results</h3>
+                <h3 className="mb-6 text-xl font-black text-on-surface">Соңғы нәтижелер</h3>
                 <div className="space-y-4">
                   {data.recentResults.length ? (
                     data.recentResults.map((result) => (
@@ -65,16 +65,16 @@ export default function AdminDashboardPage() {
                     ))
                   ) : (
                     <div className="rounded-xl bg-surface-container-low p-4 text-secondary">
-                      No results yet.
+                      Әлі нәтиже жоқ.
                     </div>
                   )}
                 </div>
               </section>
               <section className="rounded-2xl bg-surface-container-lowest p-8 shadow-soft">
                 <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-on-surface">Recent Tasks</h3>
+                  <h3 className="text-xl font-black text-on-surface">Соңғы тапсырмалар</h3>
                   <p className="text-sm font-bold text-secondary">
-                    Submissions: {data.metrics.totalSubmissions}
+                    Жауаптар: {data.metrics.totalSubmissions}
                   </p>
                 </div>
                 <div className="space-y-4">
@@ -93,7 +93,7 @@ export default function AdminDashboardPage() {
                               task.status === "active" ? "text-primary" : "text-secondary"
                             }`}
                           >
-                            {task.status}
+                            {task.status === "active" ? "Белсенді" : "Жоба"}
                           </p>
                           <p className="text-xs text-secondary">
                             {new Date(task.updatedAt).toLocaleDateString()}

@@ -1,1 +1,1 @@
-"""Math_JIHC backend package."""
+"""math_Mindset backend package."""
