@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 
@@ -43,7 +43,7 @@ def issue_token(user_id: int, role: str) -> str:
         "sub": user_id,
         "role": role,
         "exp": int(
-            (datetime.now(UTC) + timedelta(seconds=settings.token_ttl_seconds)).timestamp()
+            (datetime.now(timezone.utc) + timedelta(seconds=settings.token_ttl_seconds)).timestamp()
         ),
     }
     payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -73,7 +73,7 @@ def decode_token(token: str) -> dict[str, int | str]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
         ) from exc
-    if int(payload["exp"]) < int(datetime.now(UTC).timestamp()):
+    if int(payload["exp"]) < int(datetime.now(timezone.utc).timestamp()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token expired",
