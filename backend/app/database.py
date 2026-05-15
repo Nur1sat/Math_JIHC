@@ -42,6 +42,54 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def build_initials(full_name: str) -> str:
+    initials = "".join(part[0].upper() for part in full_name.split() if part)
+    return initials[:2] or "О"
+
+
+def create_user(
+    db: Database,
+    *,
+    email: str,
+    password: str,
+    role: str,
+    full_name: str,
+    grade_label: str | None = None,
+    avatar_url: str | None = None,
+) -> dict[str, Any]:
+    if role not in {"student", "admin"}:
+        raise ValueError("invalid_role")
+    created_at = utc_now()
+    try:
+        cursor = db.execute(
+            """
+            INSERT INTO users (
+                email, password_hash, role, full_name, grade_label, initials, avatar_url, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                normalize_email(email),
+                hash_password(password),
+                role,
+                full_name,
+                grade_label,
+                build_initials(full_name),
+                avatar_url,
+                created_at,
+            ),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("email_exists") from exc
+    user = db.fetchone("SELECT * FROM users WHERE id = ? LIMIT 1;", (cursor.lastrowid,))
+    if user is None:
+        raise RuntimeError("Created user could not be loaded")
+    return user
+
+
 def initialize_database(db: Database) -> None:
     db.execute(
         """

@@ -144,6 +144,23 @@ export const apiClient = {
       json: { email, password, role }
     });
   },
+  registerStudent(payload: {
+    email: string;
+    password: string;
+    fullName: string;
+    gradeLabel: string;
+  }) {
+    return request<{ token: string; user: Session["user"] }>("/api/v1/auth/register", {
+      method: "POST",
+      auth: false,
+      json: {
+        email: payload.email,
+        password: payload.password,
+        full_name: payload.fullName,
+        grade_label: payload.gradeLabel
+      }
+    });
+  },
   getStudentDashboard() {
     return request<StudentDashboardPayload>("/api/v1/student/dashboard", {
       cacheTtlMs: 30_000

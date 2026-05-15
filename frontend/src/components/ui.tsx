@@ -42,11 +42,6 @@ export function BrandIdentity({
 }) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <img
-        alt="math_Mindset логотипі"
-        className={compact ? "h-9 w-9 object-contain" : "h-11 w-11 object-contain"}
-        src="/math_jihc-logo.svg"
-      />
       <div className="min-w-0">
         <p className={cn("font-black tracking-tight", compact ? "text-lg" : "text-2xl", light ? "text-white" : "text-green-800")}>
           math_Mindset

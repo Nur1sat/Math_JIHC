@@ -30,8 +30,9 @@ export default function StudentLoginPage() {
           </div>
           <div className="relative z-10 mt-12 flex justify-center lg:justify-start">
             <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/10 p-8 backdrop-blur">
-              <div className="mb-8 flex items-center justify-center rounded-[2rem] bg-white/90 p-10">
-                <img alt="math_Mindset логотипі" className="h-40 w-40 object-contain" src="/math_jihc-logo.svg" />
+              <div className="mb-8 rounded-[2rem] bg-white/10 p-6">
+                <p className="text-sm font-semibold text-primary-fixed">Жеке кабинет</p>
+                <p className="mt-2 text-2xl font-black leading-tight">Тапсырмалар мен нәтижелер бір жерде.</p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center text-sm font-bold">
                 <div className="rounded-2xl bg-white/10 px-4 py-5">Тапсырма</div>
@@ -55,6 +56,12 @@ export default function StudentLoginPage() {
               submitLabel="Кіру"
               title=""
             />
+            <p className="mt-6 text-center text-sm font-medium text-secondary">
+              Аккаунт жоқ па?{" "}
+              <Link className="font-bold text-primary" href="/register">
+                Тіркелу
+              </Link>
+            </p>
           </div>
         </section>
       </div>

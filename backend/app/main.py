@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from .auth import decode_token, issue_token, verify_password
 from .cache import ResponseCache
 from .config import get_settings
-from .database import Database, get_database, utc_now
+from .database import Database, create_user, get_database, normalize_email, utc_now
 
 settings = get_settings()
 db = get_database()
@@ -40,6 +40,13 @@ class LoginPayload(BaseModel):
     email: str
     password: str
     role: str
+
+
+class RegisterPayload(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    grade_label: str | None = None
 
 
 class SubmissionPayload(BaseModel):
@@ -67,6 +74,8 @@ VOID_TAGS = {
     "track",
     "wbr",
 }
+
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class HtmlNode:
@@ -746,6 +755,45 @@ def login(payload: LoginPayload) -> dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = issue_token(user["id"], user["role"])
     return {"token": token, "user": serialize_user(user)}
+
+
+def create_student_session(
+    payload: RegisterPayload,
+    database: Database | None = None,
+) -> dict[str, Any]:
+    active_db = database or db
+    email = normalize_email(payload.email)
+    full_name = normalize_space(payload.full_name)
+    grade_label = normalize_space(payload.grade_label or "") or "Оқушы"
+
+    if not EMAIL_PATTERN.fullmatch(email):
+        raise HTTPException(status_code=422, detail="Электронды пошта дұрыс емес")
+    if not full_name:
+        raise HTTPException(status_code=422, detail="Аты-жөніңізді енгізіңіз")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=422, detail="Құпиясөз кемінде 6 таңба болуы керек")
+
+    try:
+        user = create_user(
+            active_db,
+            email=email,
+            password=payload.password,
+            role="student",
+            full_name=full_name,
+            grade_label=grade_label,
+        )
+    except ValueError as exc:
+        if str(exc) == "email_exists":
+            raise HTTPException(status_code=409, detail="Бұл пошта тіркелген") from exc
+        raise HTTPException(status_code=400, detail="Тіркелу мүмкін болмады") from exc
+
+    token = issue_token(user["id"], user["role"])
+    return {"token": token, "user": serialize_user(user)}
+
+
+@app.post(f"{settings.api_prefix}/auth/register")
+def register(payload: RegisterPayload) -> dict[str, Any]:
+    return create_student_session(payload)
 
 
 @app.get(f"{settings.api_prefix}/student/dashboard")

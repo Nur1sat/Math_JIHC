@@ -55,6 +55,34 @@ npm run dev
 
 The app runs on `http://127.0.0.1:3000`.
 
+## Student registration
+
+Students can create their own account from `http://127.0.0.1:3000/register`.
+Registration creates a `student` user and signs the student in immediately.
+
+## Create an admin
+
+Admins are created from the backend CLI, not from the public registration page:
+
+```bash
+cd backend
+source .venv/bin/activate
+python scripts/create_admin.py --email admin@example.com --full-name "Admin Name"
+```
+
+The script prompts for the password. You can also pass `--password` or set `ADMIN_PASSWORD`.
+
+## Run tests
+
+```bash
+cd backend
+.venv/bin/python -m unittest discover -s tests
+
+cd ../frontend
+npm run typecheck
+npm run build
+```
+
 ## Ескертпелер
 
 - Жүктелген суреттер мен DOCX файлдар `backend/uploads/` ішінде сақталады.
